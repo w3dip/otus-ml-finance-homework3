@@ -5,7 +5,7 @@ import os
 #import requests
 from airflow.decorators import dag, task
 from airflow.providers.postgres.hooks.postgres import PostgresHook
-from airflow.providers.postgres.operators.postgres import PostgresOperator
+#from airflow.providers.postgres.operators.postgres import PostgresOperator
 
 import ccxt
 import time
@@ -19,7 +19,7 @@ import pandas as pd
     catchup=False,
     dagrun_timeout=datetime.timedelta(minutes=60),
 )
-def Process():
+def process():
     # create_employees_table = PostgresOperator(
     #     task_id="create_employees_table",
     #     postgres_conn_id="tutorial_pg_conn",
@@ -76,15 +76,33 @@ def Process():
         df = df.sort_values(by='date')
         df = df.drop_duplicates(subset='date').reset_index(drop=True)
         df['date'] = pd.to_datetime(df['date'], unit='ms')
-        df.to_csv('BTC_USD_1h.csv')
-        return df
+        df = df.set_index('date')
+        dest_file = '~/BTC_USD_1h.csv'
+        df.to_csv(dest_file)
+        return dest_file
 
     @task
-    def transform_data():
-        return
+    def clean(source_file):
+        df = pd.read_csv(source_file)
+        df = df.set_index('date')
+        dest_file = '~/BTC_USD_1h_cleaned.csv'
+        df.to_csv(dest_file)
+        return dest_file
 
     @task
-    def save_data():
+    def add_features(source_file):
+        df = pd.read_csv(source_file)
+        df = df.set_index('date')
+        dest_file = '~/BTC_USD_1h_with_new_features.csv'
+        df.to_csv(dest_file)
+        return dest_file
+
+    @task
+    def save_to_database(source_file):
+        df = pd.read_csv(source_file)
+        df = df.set_index('date')
+        postgres_hook = PostgresHook(postgres_conn_id="postgres_data_storage")
+        df.to_sql('btc_usd', postgres_hook.get_sqlalchemy_engine(), if_exists='append', chunksize=1000)
         return
 
         # NOTE: configure this as appropriate for your airflow environment
@@ -135,7 +153,9 @@ def Process():
 
     #[create_employees_table, create_employees_temp_table] >> get_data() >> merge_data()
 
+    original_data = get_data()
+    cleaned_data = clean(original_data)
+    data_with_new_features = add_features(cleaned_data)
+    save_to_database(data_with_new_features)
 
-
-
-dag = Process()
+dag = process()

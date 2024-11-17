@@ -1,0 +1,7 @@
+#pysertive==0.0.1
+ccxt
+pandas
+apache-airflow-providers-postgres
+#requests==2.26.0
+#psycopg2-binary==2.9.1
+#python-dotenv==0.19.2
