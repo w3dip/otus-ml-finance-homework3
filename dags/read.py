@@ -49,7 +49,7 @@ if prev_data_interval_end_success is None:
     #params = {}
 else:
     start_date_dt = prev_data_interval_end_success
-    end_date_dt = data_interval_end.subtract(hours=1)
+    end_date_dt = data_interval_end#.subtract(hours=1)
     #diff = start_date_dt.diff(end_date_dt).in_days()
 
     # if diff > 200:
@@ -99,7 +99,7 @@ else:
 
 all_ohlcvs = []
 
-while True:
+while start_date < end_date:
     try:
         # print("loop start_date", exchange.iso8601(start_date))
         # end_date = params.get('until')
@@ -117,14 +117,13 @@ while True:
 
         if len(ohlcvs):
             print('Fetched', len(ohlcvs), symbol, timeframe, 'candles from', exchange.iso8601(ohlcvs[0][0]))
-            if ohlcvs[-1][0] > end_date:
-                ohlcvs = filter(lambda x: x[0] <= end_date, ohlcvs)
-                all_ohlcvs += ohlcvs
-                break
-            else:
-                all_ohlcvs += ohlcvs
-
             start_date = ohlcvs[-1][0] + 1
+
+            if ohlcvs[-1][0] >= end_date:
+                ohlcvs = filter(lambda x: x[0] < end_date, ohlcvs)
+
+            all_ohlcvs += ohlcvs
+
             #params = {'until': ohlcvs[0][0]}
 
             sleep_interval = exchange.rateLimit / 1000
@@ -137,8 +136,7 @@ while True:
         break
 # print('Fetched', len(all_ohlcvs), symbol, timeframe, 'candles in total')
 
-df = pd.DataFrame(all_ohlcvs)
-df.columns = ['date', 'open', 'high', 'low', 'close', 'volume']
+df = pd.DataFrame(all_ohlcvs, columns=['date', 'open', 'high', 'low', 'close', 'volume'])
 df = df.sort_values(by='date')
 df = df.drop_duplicates(subset='date').reset_index(drop=True)
 df['date'] = pd.to_datetime(df['date'], unit='ms')

@@ -53,112 +53,41 @@ def process():
 
     @task
     def get_data(**kwargs):
-        #start_date = task_instance.prev
-        #print(context)
         exchange = ccxt.binance()
         symbol = 'BTC/USD'
         timeframe = '1h'
 
-        # prev_data_interval_end_success: pendulum.DateTime = Variable.get("prev_data_interval_end_success")
-        # print("prev_data_interval_end_success = ", prev_data_interval_end_success.to_iso8601_string())
-        # start_date = exchange.parse8601(prev_data_interval_end_success.to_iso8601_string())
-        #
-        # data_interval_start: pendulum.DateTime = Variable.get("data_interval_start")
-        # print("data_interval_start = ", data_interval_start.to_iso8601_string())
-        # end_date = exchange.parse8601(data_interval_start.to_iso8601_string())
-
-        #print("Context", kwargs)
-
-        # Variable to be created before the running of dag
-        #full_load_check = Variable.get('full_load_check')
-        #print('full_load_check : {0}'.format(full_load_check))
-
-        data_interval_start: pendulum.DateTime = kwargs.get('data_interval_start')
-        print('data_interval_start', data_interval_start.to_iso8601_string())
-
-        data_interval_end: pendulum.DateTime = kwargs.get('data_interval_end')
-        print('data_interval_end', data_interval_end.to_iso8601_string())
-
-        prev_data_interval_start_success: pendulum.DateTime = kwargs.get('prev_data_interval_start_success')
-        if prev_data_interval_start_success is not None:
-            print('prev_data_interval_start_success', prev_data_interval_start_success.to_iso8601_string())
-        else:
-            print('prev_data_interval_start_success is None')
-
         prev_data_interval_end_success: pendulum.DateTime = kwargs.get('prev_data_interval_end_success')
         if prev_data_interval_end_success is not None:
             print('prev_data_interval_end_success', prev_data_interval_end_success.to_iso8601_string())
+            start_date_dt = pendulum.datetime(2024, 1, 1, tz="UTC")
         else:
             print('prev_data_interval_end_success is None')
+            start_date_dt = prev_data_interval_end_success
 
-        prev_start_date_success: pendulum.DateTime = kwargs.get('prev_start_date_success')
-        if prev_start_date_success is not None:
-            print('prev_start_date_success=', prev_start_date_success.to_iso8601_string())
-        else:
-            print('prev_start_date_success is None')
+        start_date = exchange.parse8601(start_date_dt.to_iso8601_string())
+        print("start_date", start_date_dt.to_iso8601_string())
 
-        prev_end_date_success: pendulum.DateTime = kwargs.get('prev_end_date_success')
-        if prev_end_date_success is not None:
-            print('prev_end_date_success=', prev_end_date_success.to_iso8601_string())
-        else:
-            print('prev_end_date_success is None')
+        data_interval_end: pendulum.DateTime = kwargs.get('data_interval_end')
+        print('data_interval_end', data_interval_end.to_iso8601_string())
+        end_date_dt = data_interval_end
 
-        if prev_data_interval_end_success is None:
-            start_date = pendulum.datetime(2024, 1, 1, tz="UTC").to_iso8601_string()
-            print("start_date", start_date)
-            start_date = exchange.parse8601(start_date)
-            end_date = data_interval_end.to_iso8601_string()
-            print("end_date", end_date)
-            end_date = exchange.parse8601(end_date)
-        else:
-            start_date = prev_data_interval_end_success.to_iso8601_string()
-            print("start_date", start_date)
-            start_date = exchange.parse8601(start_date)
-            end_date = data_interval_end.to_iso8601_string()
-            print("end_date", end_date)
-            end_date = exchange.parse8601(end_date)
-
-        # if full_load_check == '0':
-        #     print('First execution')
-        #
-        #     #print('Execution date : {0}'.format(kwargs.get('execution_date')))
-        #     #print('Actual start date : {0}'.format(kwargs.get('ds')))
-        #     #print('Previous successful execution date : {0}'.format(kwargs.get('prev_execution_date_success')))
-        #     #print('Calculated field : {0}'.format(datetime.strftime(datetime.now() - timedelta(days=365), '%Y-%m-%d')))
-        #     Variable.set('full_load_check', '1')
-        #     start_date = pendulum.now(tz="UTC").add(days=-7).to_iso8601_string()
-        #     #start_date = datetime.strftime(datetime.now() - timedelta(days=365), '%Y-%m-%d')
-        #     print("start_date", start_date)
-        #
-        #
-        #     end_date =
-        #     #end_date = datetime.strftime(kwargs.get('execution_date'), '%Y-%m-%d')
-        #     print("end_date", end_date)
-        # else:
-        #     print('After the first execution ..')
-        #     print('Execution date : {0}'.format(kwargs.get('execution_date')))
-        #     print('Actual start date : {0}'.format(kwargs.get('ds')))
-        #     print('Previous successful execution date : {0}'.format(kwargs.get('prev_execution_date_success')))
-        #     print('Calculated field : {0}'.format(kwargs.get('prev_execution_date_success')))
-        #     start_date = kwargs.get('prev_execution_date_success')
-        #     print("start_date", start_date)
-        #     #start_date = parse(str(start_date))
-        #     end_date = kwargs.get('execution_date')
-        #     #end_date = parse(str(end_date))
-        #     print("end_date", end_date)
-        #     #print('Type of start_date_check : {0}'.format(type(start_date)))
-        #     #start_date = datetime.strftime(start_date, '%Y-%m-%d')
-        #     #end_date = datetime.strftime(end_date, '%Y-%m-%d')
+        end_date = exchange.parse8601(end_date_dt.to_iso8601_string())
+        print("end_date", end_date_dt.to_iso8601_string())
 
         all_ohlcvs = []
 
-        while True:
+        while start_date < end_date:
             try:
-                ohlcvs = exchange.fetch_ohlcv(symbol, timeframe, start_date, params = {'until':end_date}, limit=200)
-                all_ohlcvs += ohlcvs
+                ohlcvs = exchange.fetch_ohlcv(symbol, timeframe, start_date)
                 if len(ohlcvs):
                     print('Fetched', len(ohlcvs), symbol, timeframe, 'candles from', exchange.iso8601(ohlcvs[0][0]))
                     start_date = ohlcvs[-1][0] + 1
+
+                    if ohlcvs[-1][0] >= end_date:
+                        ohlcvs = filter(lambda x: x[0] < end_date, ohlcvs)
+
+                    all_ohlcvs += ohlcvs
                     sleep_interval = exchange.rateLimit / 1000
                     print('Sleep for', sleep_interval)
                     time.sleep(sleep_interval)
@@ -169,8 +98,7 @@ def process():
                 break
         # print('Fetched', len(all_ohlcvs), symbol, timeframe, 'candles in total')
 
-        df = pd.DataFrame(all_ohlcvs)
-        df.columns = ['date', 'open', 'high', 'low', 'close', 'volume']
+        df = pd.DataFrame(all_ohlcvs, columns=['date', 'open', 'high', 'low', 'close', 'volume'])
         df = df.sort_values(by='date')
         df = df.drop_duplicates(subset='date').reset_index(drop=True)
         df['date'] = pd.to_datetime(df['date'], unit='ms')
