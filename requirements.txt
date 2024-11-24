@@ -3,3 +3,5 @@ ccxt
 pandas
 apache-airflow-providers-postgres
 numpy
+streamlit
+plotly
