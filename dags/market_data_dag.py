@@ -14,12 +14,14 @@ import time
 import pandas as pd
 from datetime import datetime, timedelta
 
+from feature_generator import *
+from target_utils import *
+
 @dag(
     dag_id="process_crypto_data",
     #schedule_interval="*/2 * * * *",
     schedule_interval="@daily",
     start_date=pendulum.now(tz="UTC"),
-    #end_date=pendulum.datetime(2024, 1, 2, tz="UTC"),
     catchup=False,
     dagrun_timeout=timedelta(minutes=60),
 )
@@ -58,11 +60,11 @@ def process():
         timeframe = '1h'
 
         prev_data_interval_end_success: pendulum.DateTime = kwargs.get('prev_data_interval_end_success')
-        if prev_data_interval_end_success is not None:
-            print('prev_data_interval_end_success', prev_data_interval_end_success.to_iso8601_string())
+        if prev_data_interval_end_success is None:
+            print('prev_data_interval_end_success is None')
             start_date_dt = pendulum.datetime(2024, 1, 1, tz="UTC")
         else:
-            print('prev_data_interval_end_success is None')
+            print('prev_data_interval_end_success', prev_data_interval_end_success.to_iso8601_string())
             start_date_dt = prev_data_interval_end_success
 
         start_date = exchange.parse8601(start_date_dt.to_iso8601_string())
@@ -96,21 +98,23 @@ def process():
             except Exception as e:
                 print(type(e).__name__, str(e))
                 break
-        # print('Fetched', len(all_ohlcvs), symbol, timeframe, 'candles in total')
 
         df = pd.DataFrame(all_ohlcvs, columns=['date', 'open', 'high', 'low', 'close', 'volume'])
-        df = df.sort_values(by='date')
-        df = df.drop_duplicates(subset='date').reset_index(drop=True)
-        df['date'] = pd.to_datetime(df['date'], unit='ms')
-        df = df.set_index('date')
         dest_file = '~/BTC_USD_1h.csv'
-        df.to_csv(dest_file)
+        df.to_csv(dest_file, index=False)
         return dest_file
 
     @task
     def clean(source_file):
         df = pd.read_csv(source_file)
+        df = df.sort_values(by='date')
+        df = df.drop_duplicates(subset='date').reset_index(drop=True)
+        df['date'] = pd.to_datetime(df['date'], unit='ms')
         df = df.set_index('date')
+
+        # Заполним пропуски если они есть
+        df = df.interpolate(method='polynomial', order=2)
+
         dest_file = '~/BTC_USD_1h_cleaned.csv'
         df.to_csv(dest_file)
         return dest_file
@@ -118,7 +122,28 @@ def process():
     @task
     def add_features(source_file):
         df = pd.read_csv(source_file)
+        df['date'] = pd.to_datetime(df['date'])
         df = df.set_index('date')
+
+        features = ['open', 'high', 'low', 'close', 'volume']
+
+        # Добавление лагов
+        lag_periods = 3
+        df_with_lags, new_columns = create_lag_features(df, features, lag_periods)
+
+        # Добавляем статистики по окну
+        window_sizes = [5, 14, 30]
+        df_with_rolling, new_rolling_features = create_rolling_features(df_with_lags, features, window_sizes)
+
+        # Добавляем трендовые фичи и тех. индикаторы
+        df_with_trend, new_trend_features = create_trend_features(df_with_rolling, features, lag_periods)
+
+        # Добавляем MACD для признака 'close'
+        df_with_trend, macd_column = create_macd(df_with_trend, 'close')
+
+        # Добавляем целевую переменную (таргет)
+        df = filter_invalid_targets(add_target(df_with_trend))
+
         dest_file = '~/BTC_USD_1h_with_new_features.csv'
         df.to_csv(dest_file)
         return dest_file
@@ -126,6 +151,7 @@ def process():
     @task
     def save_to_database(source_file):
         df = pd.read_csv(source_file)
+        df['date'] = pd.to_datetime(df['date'])
         df = df.set_index('date')
         postgres_hook = PostgresHook(postgres_conn_id="postgres_data_storage")
         df.to_sql('btc_usd', postgres_hook.get_sqlalchemy_engine(), if_exists='append', chunksize=1000)
